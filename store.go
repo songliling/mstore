@@ -1,8 +1,6 @@
 package mstore
 
 import (
-	"fmt"
-
 	"github.com/cosmos/cosmos-sdk/store"
 	stypes "github.com/cosmos/cosmos-sdk/store/types"
 	dbm "github.com/tendermint/tendermint/libs/db"
@@ -18,23 +16,22 @@ var (
 	cms stypes.CommitMultiStore
 )
 
-func InitStore() {
+func InitStore() stypes.CommitID {
 	var err error
 	db, err = dbm.NewGoLevelDB(dbName, dbHome)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("backend db ready")
 
 	cms = store.NewCommitMultiStore(db)
-	fmt.Println("cms ready")
+	return cms.LastCommitID()
 }
 
-func CloseStore() (id stypes.CommitID) {
-	id = cms.Commit()
+func CloseStore() stypes.CommitID {
+	status := cms.Commit()
 	db.Close()
 	cms = nil
-	return
+	return status
 }
 
 func CreateNewCommitKV(key stypes.StoreKey) {
