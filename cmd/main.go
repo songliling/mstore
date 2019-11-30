@@ -9,6 +9,7 @@ import (
 	"time"
 
 	stypes "github.com/cosmos/cosmos-sdk/store/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/tjan147/mstore"
 )
 
@@ -66,6 +67,37 @@ func verifyData(ckv stypes.CommitKVStore, size int, count int) {
 	}
 }
 
+func fillRecordsIndexedByTime(ckv stypes.CommitKVStore, start time.Time, step time.Duration, count int) {
+	fmt.Printf(
+		"---> Fill %d time-indexed records from %s with %0.1fs step <---\n",
+		count, start.Format("15:04:05"), step.Seconds())
+
+	i := 1
+	t := start
+	for ; i <= count; i++ {
+		t = t.Add(step)
+		ckv.Set(sdk.PrefixEndBytes(sdk.FormatTimeBytes(t)), []byte(strconv.Itoa(i)))
+		fmt.Printf("[%d/%d] records inserted, index %s\n", i+1, count, t.Format("15:04:05"))
+	}
+	ver := ckv.Commit()
+	fmt.Printf("%d time-indexed records inserted, %s\n", i+1, ver.String())
+}
+
+func pickRecordsFilteredByTime(ckv stypes.CommitKVStore, start, end time.Time) {
+	iter := ckv.Iterator(sdk.FormatTimeBytes(start), sdk.InclusiveEndBytes(sdk.FormatTimeBytes(end)))
+	count := 0
+	for ; iter.Valid(); iter.Next() {
+		val, err := strconv.Atoi(string(iter.Value()))
+		if err != nil {
+			fmt.Printf("[%d]: err: %s\n", count+1, err.Error())
+		} else {
+			fmt.Printf("[%d]: %d\n", count+1, val)
+		}
+		count++
+	}
+	fmt.Printf("%d time-indexed records picked\n", count)
+}
+
 func demoCase1() {
 	initVer := mstore.InitStore()
 	fmt.Printf("- init store: %s\n", initVer.String())
@@ -88,18 +120,46 @@ func demoCase1() {
 func demoCase2() {
 	start := time.Now()
 	initVer := mstore.InitStore()
+	fmt.Printf("- init store: reversion: %s\n", initVer.String())
+
+	key := stypes.NewKVStoreKey(name)
+	mstore.CreateNewCommitKV(key)
+	ckv := mstore.GetCommitKV(key)
 	elapse := time.Now().Sub(start)
-	fmt.Printf("- init store: cost %.2fs, reversion: %s\n", elapse.Seconds(), initVer.String())
+	fmt.Printf("- prepare kv: cost: %.2fs, reversion: %s\n", elapse.Seconds(), ckv.LastCommitID().String())
+
+	start = time.Now()
+	verifyData(ckv, scale, cover)
+	elapse = time.Now().Sub(start)
+	fmt.Printf("\n----- DONE -----\nverifyData with %d/%d samples costs %.2fs \n", cover, scale, elapse.Seconds())
+	fmt.Printf("%s CommitKVStore reversion: %s\n", key.Name(), ckv.LastCommitID().String())
+
+	closeVer := mstore.CloseStore()
+	fmt.Printf("close store: %s\n", closeVer.String())
+}
+
+func demoCase3() {
+	initVer := mstore.InitStore()
+	fmt.Printf("- init store: %s\n", initVer.String())
 
 	key := stypes.NewKVStoreKey(name)
 	mstore.CreateNewCommitKV(key)
 	ckv := mstore.GetCommitKV(key)
 	fmt.Println("prepare kv")
 
-	start = time.Now()
-	verifyData(ckv, scale, cover)
-	elapse = time.Now().Sub(start)
-	fmt.Printf("\n----- DONE -----\nverifyData with %d samples costs %.2fs \n", scale, elapse.Seconds())
+	start := time.Now()
+	fillStart := time.Date(2019, 11, 30, 16, 20, 0, 0, time.UTC)
+	fillStep, err := time.ParseDuration("1s")
+	if err != nil {
+		panic(err)
+	}
+	fillCount := 600
+	fillRecordsIndexedByTime(ckv, fillStart, fillStep, fillCount)
+	pickStart := time.Date(2019, 11, 30, 16, 25, 0, 0, time.UTC)
+	pickEnd := time.Date(2019, 11, 30, 16, 26, 0, 0, time.UTC)
+	pickRecordsFilteredByTime(ckv, pickStart, pickEnd)
+	elapse := time.Now().Sub(start)
+	fmt.Printf("\n----- DONE -----\nfill+pick costs %.2fs \n", elapse.Seconds())
 	fmt.Printf("%s CommitKVStore reversion: %s\n", key.Name(), ckv.LastCommitID().String())
 
 	closeVer := mstore.CloseStore()
@@ -117,8 +177,10 @@ func main() {
 		demoCase1()
 	case 2:
 		demoCase2()
+	case 3:
+		demoCase3()
 	default:
 		fmt.Println("error: invalid demo case selection")
-		fmt.Println("usage: cmd -case (1|2)")
+		fmt.Println("usage: cmd -case (1|2|3)")
 	}
 }
