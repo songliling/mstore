@@ -24,13 +24,13 @@ func InitStore() stypes.CommitID {
 	}
 
 	cms = store.NewCommitMultiStore(db)
+	cms.SetPruning(stypes.PruneSyncable)
 	return cms.LastCommitID()
 }
 
 func CloseStore() stypes.CommitID {
-	status := cms.Commit()
+	status := cms.LastCommitID()
 	db.Close()
-	cms = nil
 	return status
 }
 
@@ -41,4 +41,12 @@ func CreateNewCommitKV(key stypes.StoreKey) {
 
 func GetCommitKV(key stypes.StoreKey) stypes.CommitKVStore {
 	return cms.GetCommitKVStore(key)
+}
+
+func GetStoreRecoverSpot() stypes.CommitID {
+	return cms.Commit()
+}
+
+func LoadStoreRecoverSpot(rev int64) error {
+	return cms.LoadVersion(rev)
 }

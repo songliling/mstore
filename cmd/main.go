@@ -166,6 +166,63 @@ func demoCase3() {
 	fmt.Printf("close store: %s\n", closeVer.String())
 }
 
+func demoCase4() {
+	initVer := mstore.InitStore()
+	fmt.Printf("- init store: %s\n", initVer.String())
+
+	key := stypes.NewKVStoreKey(name)
+	mstore.CreateNewCommitKV(key)
+	ckv := mstore.GetCommitKV(key)
+	fmt.Println("prepare kv")
+
+	dKey := []byte("data")
+	// 1st stage
+	dVal := []byte(strconv.Itoa(111))
+	ckv.Set(dKey, dVal)
+	stage1Ver := mstore.GetStoreRecoverSpot()
+	ckvID := ckv.LastCommitID()
+	fmt.Printf("stage1Ver: %s, ckvVer: %s, dVal = %v\n", stage1Ver.String(), ckvID.String(), dVal)
+
+	// 2nd stage
+	dVal = []byte(strconv.Itoa(222))
+	ckv.Set(dKey, dVal)
+	stage2Ver := mstore.GetStoreRecoverSpot()
+	ckvID = ckv.LastCommitID()
+	fmt.Printf("stage2Ver: %s, ckvVer: %s, dVal = %v\n", stage2Ver.String(), ckvID.String(), dVal)
+
+	// 3rd stage
+	dVal = []byte(strconv.Itoa(333))
+	ckv.Set(dKey, dVal)
+	stage3Ver := mstore.GetStoreRecoverSpot()
+	ckvID = ckv.LastCommitID()
+	fmt.Printf("stage3Ver: %s, ckvVer: %s, dVal = %v\n", stage3Ver.String(), ckvID.String(), dVal)
+
+	// latest stage
+	lVal := ckv.Get(dKey)
+	fmt.Printf("latest stage: lVal = %v\n", lVal)
+
+	// restore the 1st stage
+	if err := mstore.LoadStoreRecoverSpot(stage1Ver.Version); err != nil {
+		panic(err)
+	}
+	ckv = mstore.GetCommitKV(key)
+	lVal = ckv.Get(dKey)
+	ckvID = ckv.LastCommitID()
+	fmt.Printf("restore stage1Ver ckvID: %s, lVal = %v\n", ckvID.String(), lVal)
+
+	// restore the 2nd stage
+	if err := mstore.LoadStoreRecoverSpot(stage2Ver.Version); err != nil {
+		panic(err)
+	}
+	ckv = mstore.GetCommitKV(key)
+	lVal = ckv.Get(dKey)
+	ckvID = ckv.LastCommitID()
+	fmt.Printf("restore stage2Ver ckvID: %s, lVal = %v\n", ckvID.String(), lVal)
+
+	closeVer := mstore.CloseStore()
+	fmt.Printf("close store: %s\n", closeVer.String())
+}
+
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
@@ -179,8 +236,10 @@ func main() {
 		demoCase2()
 	case 3:
 		demoCase3()
+	case 4:
+		demoCase4()
 	default:
 		fmt.Println("error: invalid demo case selection")
-		fmt.Println("usage: cmd -case (1|2|3)")
+		fmt.Println("usage: cmd -case (1|2|3|4)")
 	}
 }
