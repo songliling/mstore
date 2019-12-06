@@ -12,8 +12,8 @@ const (
 )
 
 var (
-	db  dbm.DB
-	cms stypes.CommitMultiStore
+	db   dbm.DB
+	fcms stypes.ForkableCommitMultiStore
 )
 
 func InitStore() stypes.CommitID {
@@ -23,30 +23,34 @@ func InitStore() stypes.CommitID {
 		panic(err)
 	}
 
-	cms = store.NewCommitMultiStore(db)
-	cms.SetPruning(stypes.PruneSyncable)
-	return cms.LastCommitID()
+	fcms = store.NewForkableCommitMultiStore(db)
+	fcms.SetPruning(stypes.PruneSyncable)
+	return fcms.LastCommitID()
 }
 
 func CloseStore() stypes.CommitID {
-	status := cms.LastCommitID()
+	status := fcms.LastCommitID()
 	db.Close()
 	return status
 }
 
 func CreateNewCommitKV(key stypes.StoreKey) {
-	cms.MountStoreWithDB(key, stypes.StoreTypeIAVL, db)
-	cms.LoadLatestVersion()
+	fcms.MountStoreWithDB(key, stypes.StoreTypeIAVL, db)
+	fcms.LoadLatestVersion()
 }
 
 func GetCommitKV(key stypes.StoreKey) stypes.CommitKVStore {
-	return cms.GetCommitKVStore(key)
+	return fcms.GetCommitKVStore(key)
 }
 
 func GetStoreRecoverSpot() stypes.CommitID {
-	return cms.Commit()
+	return fcms.Commit()
 }
 
 func LoadStoreRecoverSpot(rev int64) error {
-	return cms.LoadVersion(rev)
+	return fcms.LoadVersion(rev)
+}
+
+func LoadStoreRecoverSpotForOverwriting(rev int64) error {
+	return fcms.LoadVersionForOverwriting(rev)
 }
