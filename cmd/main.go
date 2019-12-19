@@ -323,6 +323,37 @@ func demoCase6Step2() {
 	demoCase5Step2()
 }
 
+func demoCase7() {
+	mstore.InitStore()
+
+	key := stypes.NewKVStoreKey(name)
+	mstore.CreateNewCommitKV(key)
+
+	// 1st stage, write directly
+	mstore.GetCommitKV(key).Set([]byte("111"), []byte(strconv.Itoa(111)))
+
+	// 2nd stage, cache changes but do not write
+	mstore.GetCacheKV(key).Set([]byte("222"), []byte(strconv.Itoa(222)))
+
+	// to valid if the cache is written
+	mstore.GetStoreRecoverSpot()
+
+	// 3rd stage, cache changes and write
+	cache := mstore.GetCacheKV(key)
+	cache.Set([]byte("333"), []byte(strconv.Itoa(333)))
+	cache.Write()
+	mstore.GetStoreRecoverSpot()
+
+	// reopen store & validate result
+	ckv := mstore.GetCommitKV(key)
+
+	fmt.Printf("%s: %v\n", "111", ckv.Get([]byte("111")))
+	fmt.Printf("%s: %v\n", "222", ckv.Get([]byte("222")))
+	fmt.Printf("%s: %v\n", "333", ckv.Get([]byte("333")))
+
+	mstore.CloseStore()
+}
+
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
@@ -359,8 +390,9 @@ func main() {
 			fmt.Println("error: invalid demo case step selection")
 			fmt.Println("usage: cmd -case 6 -step (1|2)")
 		}
+	case 7:
+		demoCase7()
 	default:
 		fmt.Println("error: invalid demo case selection")
-		fmt.Println("usage: cmd -case (1|2|3|4)")
 	}
 }

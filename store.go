@@ -1,6 +1,8 @@
 package mstore
 
 import (
+	"fmt"
+
 	"github.com/cosmos/cosmos-sdk/store"
 	stypes "github.com/cosmos/cosmos-sdk/store/types"
 	dbm "github.com/tendermint/tendermint/libs/db"
@@ -37,6 +39,15 @@ func CloseStore() stypes.CommitID {
 func CreateNewCommitKV(key stypes.StoreKey) {
 	fcms.MountStoreWithDB(key, stypes.StoreTypeIAVL, db)
 	fcms.LoadLatestVersion()
+}
+
+func GetCacheKV(key stypes.StoreKey) stypes.CacheKVStore {
+	wrapper := fcms.GetKVStore(key).CacheWrap()
+	cacheKV, ok := wrapper.(stypes.CacheKVStore)
+	if !ok {
+		panic(fmt.Errorf("Unsupported StoreType\n"))
+	}
+	return cacheKV
 }
 
 func GetCommitKV(key stypes.StoreKey) stypes.CommitKVStore {
