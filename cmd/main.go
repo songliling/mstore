@@ -354,6 +354,34 @@ func demoCase7() {
 	mstore.CloseStore()
 }
 
+func demoCase8Step1() {
+	mstore.InitStore()
+
+	key := stypes.NewKVStoreKey(name)
+	mstore.CreateNewCommitKV(key)
+
+	// 1st stage, write directly
+	mstore.GetCommitKV(key).Set([]byte("111"), []byte(strconv.Itoa(111)))
+	fmt.Printf("1: %v\n", mstore.GetStoreRecoverSpot())
+
+	mstore.GetCommitKV(key).Set([]byte("222"), []byte(strconv.Itoa(222)))
+	fmt.Printf("2: %v\n", mstore.GetStoreRecoverSpot())
+
+	mstore.CloseStore()
+}
+
+func demoCase8Step2() {
+	mstore.InitStore()
+
+	key := stypes.NewKVStoreKey(name)
+	mstore.CreateNewCommitKV(key)
+
+	mstore.LoadStoreRecoverSpotForOverwriting(1)
+	fmt.Printf("reset 1: %v\n", mstore.GetStoreRecoverSpot())
+
+	mstore.CloseStore()
+}
+
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
@@ -392,6 +420,15 @@ func main() {
 		}
 	case 7:
 		demoCase7()
+	case 8:
+		switch *demoCaseStep {
+		case 1:
+			demoCase8Step1()
+		case 2:
+			demoCase8Step2()
+		default:
+			fmt.Println("no such step")
+		}
 	default:
 		fmt.Println("error: invalid demo case selection")
 	}
