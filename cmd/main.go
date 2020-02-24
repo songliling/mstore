@@ -166,10 +166,227 @@ func demoCase3() {
 	fmt.Printf("close store: %s\n", closeVer.String())
 }
 
+func demoCase4() {
+	initVer := mstore.InitStore()
+	fmt.Printf("- init store: %s\n", initVer.String())
+
+	key := stypes.NewKVStoreKey(name)
+	mstore.CreateNewCommitKV(key)
+	ckv := mstore.GetCommitKV(key)
+	fmt.Println("prepare kv")
+
+	dKey := []byte("data")
+	// 1st stage
+	dVal := []byte(strconv.Itoa(111))
+	ckv.Set(dKey, dVal)
+	stage1Ver := mstore.GetStoreRecoverSpot()
+	ckvID := ckv.LastCommitID()
+	fmt.Printf("stage1Ver: %s, ckvVer: %s, dVal = %v\n", stage1Ver.String(), ckvID.String(), dVal)
+
+	// 2nd stage
+	dVal = []byte(strconv.Itoa(222))
+	ckv.Set(dKey, dVal)
+	stage2Ver := mstore.GetStoreRecoverSpot()
+	ckvID = ckv.LastCommitID()
+	fmt.Printf("stage2Ver: %s, ckvVer: %s, dVal = %v\n", stage2Ver.String(), ckvID.String(), dVal)
+
+	// 3rd stage
+	dVal = []byte(strconv.Itoa(333))
+	ckv.Set(dKey, dVal)
+	stage3Ver := mstore.GetStoreRecoverSpot()
+	ckvID = ckv.LastCommitID()
+	fmt.Printf("stage3Ver: %s, ckvVer: %s, dVal = %v\n", stage3Ver.String(), ckvID.String(), dVal)
+
+	// latest stage
+	lVal := ckv.Get(dKey)
+	fmt.Printf("latest stage: lVal = %v\n", lVal)
+
+	// restore the 1st stage
+	if err := mstore.LoadStoreRecoverSpot(stage1Ver.Version); err != nil {
+		panic(err)
+	}
+	ckv = mstore.GetCommitKV(key)
+	lVal = ckv.Get(dKey)
+	ckvID = ckv.LastCommitID()
+	fmt.Printf("restore stage1Ver ckvID: %s, lVal = %v\n", ckvID.String(), lVal)
+
+	// restore the 2nd stage
+	if err := mstore.LoadStoreRecoverSpot(stage2Ver.Version); err != nil {
+		panic(err)
+	}
+	ckv = mstore.GetCommitKV(key)
+	lVal = ckv.Get(dKey)
+	ckvID = ckv.LastCommitID()
+	fmt.Printf("restore stage2Ver ckvID: %s, lVal = %v\n", ckvID.String(), lVal)
+
+	closeVer := mstore.CloseStore()
+	fmt.Printf("close store: %s\n", closeVer.String())
+}
+
+func demoCase5Step1() {
+	initVer := mstore.InitStore()
+	fmt.Printf("- Step1 - init store: %s\n", initVer.String())
+
+	key := stypes.NewKVStoreKey(name)
+	mstore.CreateNewCommitKV(key)
+	ckv := mstore.GetCommitKV(key)
+	dKey := []byte("data")
+
+	// 1st stage
+	dVal := []byte(strconv.Itoa(111))
+	ckv.Set(dKey, dVal)
+	stage1Ver := mstore.GetStoreRecoverSpot()
+	fmt.Printf("stage1Ver: %s, dVal = %s\n", stage1Ver.String(), string(dVal))
+
+	// 2nd stage
+	dVal = []byte(strconv.Itoa(222))
+	ckv.Set(dKey, dVal)
+	stage2Ver := mstore.GetStoreRecoverSpot()
+	fmt.Printf("stage2Ver: %s, dVal = %s\n", stage2Ver.String(), string(dVal))
+
+	// 3rd stage
+	dVal = []byte(strconv.Itoa(333))
+	ckv.Set(dKey, dVal)
+	stage3Ver := mstore.GetStoreRecoverSpot()
+	fmt.Printf("stage3Ver: %s, dVal = %s\n", stage3Ver.String(), string(dVal))
+
+	// restore the 1st stage
+	if err := mstore.LoadStoreRecoverSpot(stage1Ver.Version); err != nil {
+		panic(err)
+	}
+	ckv = mstore.GetCommitKV(key)
+	lVal := ckv.Get(dKey)
+	fmt.Printf("restore stage1Ver: lVal = %s\n", string(lVal))
+
+	mstore.CloseStore()
+}
+
+func demoCase5Step2() {
+	initVer := mstore.InitStore()
+	fmt.Printf("- Step2 - init store: %s\n", initVer.String())
+
+	key := stypes.NewKVStoreKey(name)
+	mstore.CreateNewCommitKV(key)
+	ckv := mstore.GetCommitKV(key)
+	dKey := []byte("data")
+	lVal := ckv.Get(dKey)
+	fmt.Printf("reload lVal = %s\n", string(lVal))
+
+	mstore.CloseStore()
+}
+
+func demoCase6Step1() {
+	initVer := mstore.InitStore()
+	fmt.Printf("- Step1 - init store: %s\n", initVer.String())
+
+	key := stypes.NewKVStoreKey(name)
+	mstore.CreateNewCommitKV(key)
+	ckv := mstore.GetCommitKV(key)
+	dKey := []byte("data")
+
+	// 1st stage
+	dVal := []byte(strconv.Itoa(111))
+	ckv.Set(dKey, dVal)
+	stage1Ver := mstore.GetStoreRecoverSpot()
+	fmt.Printf("stage1Ver: %s, dVal = %s\n", stage1Ver.String(), string(dVal))
+
+	// 2nd stage
+	dVal = []byte(strconv.Itoa(222))
+	ckv.Set(dKey, dVal)
+	stage2Ver := mstore.GetStoreRecoverSpot()
+	fmt.Printf("stage2Ver: %s, dVal = %s\n", stage2Ver.String(), string(dVal))
+
+	// 3rd stage
+	dVal = []byte(strconv.Itoa(333))
+	ckv.Set(dKey, dVal)
+	stage3Ver := mstore.GetStoreRecoverSpot()
+	fmt.Printf("stage3Ver: %s, dVal = %s\n", stage3Ver.String(), string(dVal))
+
+	// restore the 1st stage
+	if err := mstore.LoadStoreRecoverSpotForOverwriting(stage1Ver.Version); err != nil {
+		panic(err)
+	}
+	ckv = mstore.GetCommitKV(key)
+	lVal := ckv.Get(dKey)
+	fmt.Printf("restore stage1Ver lVal = %s\n", string(lVal))
+
+	// change after restore & commit
+	dVal = []byte(strconv.Itoa(444))
+	ckv.Set(dKey, dVal)
+	stageVer := mstore.GetStoreRecoverSpot()
+	fmt.Printf("stageVer: %s\n", stageVer.String())
+
+	mstore.CloseStore()
+}
+
+func demoCase6Step2() {
+	demoCase5Step2()
+}
+
+func demoCase7() {
+	mstore.InitStore()
+
+	key := stypes.NewKVStoreKey(name)
+	mstore.CreateNewCommitKV(key)
+
+	// 1st stage, write directly
+	mstore.GetCommitKV(key).Set([]byte("111"), []byte(strconv.Itoa(111)))
+
+	// 2nd stage, cache changes but do not write
+	mstore.GetCacheKV(key).Set([]byte("222"), []byte(strconv.Itoa(222)))
+
+	// to valid if the cache is written
+	mstore.GetStoreRecoverSpot()
+
+	// 3rd stage, cache changes and write
+	cache := mstore.GetCacheKV(key)
+	cache.Set([]byte("333"), []byte(strconv.Itoa(333)))
+	cache.Write()
+	mstore.GetStoreRecoverSpot()
+
+	// reopen store & validate result
+	ckv := mstore.GetCommitKV(key)
+
+	fmt.Printf("%s: %v\n", "111", ckv.Get([]byte("111")))
+	fmt.Printf("%s: %v\n", "222", ckv.Get([]byte("222")))
+	fmt.Printf("%s: %v\n", "333", ckv.Get([]byte("333")))
+
+	mstore.CloseStore()
+}
+
+func demoCase8Step1() {
+	mstore.InitStore()
+
+	key := stypes.NewKVStoreKey(name)
+	mstore.CreateNewCommitKV(key)
+
+	// 1st stage, write directly
+	mstore.GetCommitKV(key).Set([]byte("111"), []byte(strconv.Itoa(111)))
+	fmt.Printf("1: %v\n", mstore.GetStoreRecoverSpot())
+
+	mstore.GetCommitKV(key).Set([]byte("222"), []byte(strconv.Itoa(222)))
+	fmt.Printf("2: %v\n", mstore.GetStoreRecoverSpot())
+
+	mstore.CloseStore()
+}
+
+func demoCase8Step2() {
+	mstore.InitStore()
+
+	key := stypes.NewKVStoreKey(name)
+	mstore.CreateNewCommitKV(key)
+
+	mstore.LoadStoreRecoverSpotForOverwriting(1)
+	fmt.Printf("reset 1: %v\n", mstore.GetStoreRecoverSpot())
+
+	mstore.CloseStore()
+}
+
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	demoCase := flag.Int("case", 0, "select a demo case to run")
+	demoCaseStep := flag.Int("step", 1, "select a specific step of the demo case to run")
 	flag.Parse()
 
 	switch *demoCase {
@@ -179,8 +396,40 @@ func main() {
 		demoCase2()
 	case 3:
 		demoCase3()
+	case 4:
+		demoCase4()
+	case 5:
+		switch *demoCaseStep {
+		case 1:
+			demoCase5Step1()
+		case 2:
+			demoCase5Step2()
+		default:
+			fmt.Println("error: invalid demo case step selection")
+			fmt.Println("usage: cmd -case 5 -step (1|2)")
+		}
+	case 6:
+		switch *demoCaseStep {
+		case 1:
+			demoCase6Step1()
+		case 2:
+			demoCase6Step2()
+		default:
+			fmt.Println("error: invalid demo case step selection")
+			fmt.Println("usage: cmd -case 6 -step (1|2)")
+		}
+	case 7:
+		demoCase7()
+	case 8:
+		switch *demoCaseStep {
+		case 1:
+			demoCase8Step1()
+		case 2:
+			demoCase8Step2()
+		default:
+			fmt.Println("no such step")
+		}
 	default:
 		fmt.Println("error: invalid demo case selection")
-		fmt.Println("usage: cmd -case (1|2|3)")
 	}
 }

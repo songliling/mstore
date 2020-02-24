@@ -1,6 +1,8 @@
 package mstore
 
 import (
+	"fmt"
+
 	"github.com/cosmos/cosmos-sdk/store"
 	stypes "github.com/cosmos/cosmos-sdk/store/types"
 	dbm "github.com/tendermint/tendermint/libs/db"
@@ -12,8 +14,8 @@ const (
 )
 
 var (
-	db  dbm.DB
-	cms stypes.CommitMultiStore
+	db   dbm.DB
+	fcms stypes.ForkableCommitMultiStore
 )
 
 func InitStore() stypes.CommitID {
@@ -23,22 +25,43 @@ func InitStore() stypes.CommitID {
 		panic(err)
 	}
 
-	cms = store.NewCommitMultiStore(db)
-	return cms.LastCommitID()
+	fcms = store.NewForkableCommitMultiStore(db)
+	fcms.SetPruning(stypes.PruneSyncable)
+	return fcms.LastCommitID()
 }
 
 func CloseStore() stypes.CommitID {
-	status := cms.Commit()
+	status := fcms.LastCommitID()
 	db.Close()
-	cms = nil
 	return status
 }
 
 func CreateNewCommitKV(key stypes.StoreKey) {
-	cms.MountStoreWithDB(key, stypes.StoreTypeIAVL, db)
-	cms.LoadLatestVersion()
+	fcms.MountStoreWithDB(key, stypes.StoreTypeIAVL, db)
+	fcms.LoadLatestVersion()
+}
+
+func GetCacheKV(key stypes.StoreKey) stypes.CacheKVStore {
+	wrapper := fcms.GetKVStore(key).CacheWrap()
+	cacheKV, ok := wrapper.(stypes.CacheKVStore)
+	if !ok {
+		panic(fmt.Errorf("Unsupported StoreType\n"))
+	}
+	return cacheKV
 }
 
 func GetCommitKV(key stypes.StoreKey) stypes.CommitKVStore {
-	return cms.GetCommitKVStore(key)
+	return fcms.GetCommitKVStore(key)
+}
+
+func GetStoreRecoverSpot() stypes.CommitID {
+	return fcms.Commit()
+}
+
+func LoadStoreRecoverSpot(rev int64) error {
+	return fcms.LoadVersion(rev)
+}
+
+func LoadStoreRecoverSpotForOverwriting(rev int64) error {
+	return fcms.LoadVersionForOverwriting(rev)
 }
