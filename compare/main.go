@@ -16,6 +16,7 @@ const (
 	GoLevelDB = "golevel"
 	IavlDB    = "iavl"
 	Round     = 10
+	Version   = "0.12.0"
 )
 
 func random(max, min int64) int64 {
@@ -42,7 +43,7 @@ func CreateLevelDB(size int64, prefix string) *db.GoLevelDB {
 }
 
 func CreateIavlDB(size int64, prefix string) (sdk.KVStore, sdk.CommitMultiStore) {
-	levelDB, err := db.NewGoLevelDB(fmt.Sprintf("iavl%s_%d", prefix, size), "")
+	levelDB, err := db.NewGoLevelDB(fmt.Sprintf("iavl%s_%s_%d", prefix, Version, size), "")
 	if err != nil {
 		panic(err)
 	}
@@ -86,8 +87,10 @@ func iavlMockData(size int64, long bool) {
 			key := Int64ToBytes(i)
 			value := ed25519.GenPrivKey().PubKey().Address().Bytes()
 			store.Set(key, value)
+			if i%100 == 0 {
+				cms.Commit()
+			}
 		}
-		cms.Commit()
 	} else {
 		store, cms := CreateIavlDB(size, "long")
 		for i := int64(0); i < size; i++ {
