@@ -12,6 +12,10 @@ import (
 	"time"
 )
 
+var (
+	PruningType = "nothing"
+)
+
 const (
 	GoLevelDB = "golevel"
 	IavlDB    = "iavl"
@@ -43,12 +47,24 @@ func CreateLevelDB(size int64, prefix string) *db.GoLevelDB {
 }
 
 func CreateIavlDB(size int64, prefix string) (sdk.KVStore, sdk.CommitMultiStore) {
-	levelDB, err := db.NewGoLevelDB(fmt.Sprintf("iavl%s_%s_%d", prefix, Version, size), "")
+	var opts = cstore.PruneNothing
+	var endPrefix = PruningType
+
+	switch endPrefix {
+	case "every":
+		opts = cstore.PruneEverything
+	case "sync":
+		opts = cstore.PruneSyncable
+	default:
+		opts = cstore.PruneNothing
+	}
+
+	levelDB, err := db.NewGoLevelDB(fmt.Sprintf("iavl%s_%s_%s_%d", prefix, Version, endPrefix, size), "")
 	if err != nil {
 		panic(err)
 	}
 	cms := cstore.NewCommitMultiStore(levelDB)
-	cms.SetPruning(cstore.PruneSyncable)
+	cms.SetPruning(opts)
 
 	storeKey := sdk.NewKVStoreKey(fmt.Sprintf("iavl_%d", size))
 	cms.MountStoreWithDB(storeKey, sdk.StoreTypeIAVL, levelDB)
