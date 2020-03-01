@@ -1,39 +1,45 @@
 ### 编译
 
-```go build -o test main.go```
+```
+flags="-X 'main.PruningType=sync'"
+go build -ldflags "$flags" -x -o 13_sync main.go types.go
+
+flags="-X 'main.PruningType=every'"
+go build -ldflags "$flags" -x -o 13_every main.go types.go
+
+flags="-X 'main.PruningType=nothing'"
+go build -ldflags "$flags" -x -o 13_nothing main.go types.go
+```
 
 #### 生成数据
 
-levelDB:
+sync pruning   
+* 10W量级： ```./13_sync --case 3```
+* 100W量级： ```./13_sync --case 4```
 
-* 10W量级： ```./test --case 1```
-* 100W量级： ```./test --case 2```
+every pruning
+* 10W量级： ```./13_every --case 3```
+* 100W量级： ```./13_every --case 4```
 
-iavlDB:
+nothing pruning
+* 10W量级： ```./13_nothing --case 3```
+* 100W量级： ```./13_nothing --case 4```
 
-* 10W量级： ```./test --case 3```
-* 100W量级： ```./test --case 4```
+#### 观测数据变化
 
-#### get key平均时间
+```$xslt
+get 
+./sync.sh
+set
+./sync.sh set
 
-levelDB:
+get 
+./every.sh
+set
+./every.sh set
 
-* 10W量级： ```./test --case 1 --time```
-* 100W量级： ```./test --case 2 --time```
-
-iavlDB:
-
-* 10W量级： ```./test --case 3 --time```
-* 100W量级： ```./test --case 4 --time```
-
-#### set key平均时间
-
-levelDB:
-
-* 10W量级： ```./test --case 1 --set```
-* 100W量级： ```./test --case 2 --set```
-
-iavlDB:
-
-* 10W量级： ```./test --case 3 --set```
-* 100W量级： ```./test --case 4 --set```
+get 
+./nothing.sh
+set
+./nothing.sh set
+```

@@ -59,7 +59,7 @@ func CreateIavlDB(size int64, prefix string) (sdk.KVStore, sdk.CommitMultiStore)
 		opts = cstore.PruneNothing
 	}
 
-	levelDB, err := db.NewGoLevelDB(fmt.Sprintf("iavl%s_%s_%s_%d", prefix, Version, endPrefix, size), "")
+	levelDB, err := db.NewGoLevelDB(fmt.Sprintf("iavl%s_%s_%s_%d", prefix, Version, "nothing", size), "")
 	if err != nil {
 		panic(err)
 	}
