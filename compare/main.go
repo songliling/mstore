@@ -7,7 +7,7 @@ import (
 	cstore "github.com/cosmos/cosmos-sdk/store"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"github.com/tendermint/tendermint/libs/db"
+	"github.com/tendermint/tm-db"
 	"math/rand"
 	"time"
 )
@@ -86,8 +86,11 @@ func iavlMockData(size int64, long bool) {
 			key := Int64ToBytes(i)
 			value := ed25519.GenPrivKey().PubKey().Address().Bytes()
 			store.Set(key, value)
+			if i%100 == 0 {
+				fmt.Printf("commit index %d\n", i)
+				cms.Commit()
+			}
 		}
-		cms.Commit()
 	} else {
 		store, cms := CreateIavlDB(size, "long")
 		for i := int64(0); i < size; i++ {
