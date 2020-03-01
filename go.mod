@@ -27,5 +27,3 @@ require (
 	golang.org/x/crypto v0.0.0-20190313024323-a1f597ede03a // indirect
 	google.golang.org/grpc v1.23.1 // indirect
 )
-
-replace github.com/cosmos/cosmos-sdk => ../../LambdaIM/cosmos-sdk
