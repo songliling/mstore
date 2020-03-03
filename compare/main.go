@@ -1,332 +1,164 @@
 package main
 
 import (
-	"encoding/binary"
-	"flag"
+	"encoding/hex"
 	"fmt"
 	cstore "github.com/cosmos/cosmos-sdk/store"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tm-db"
+	tdb "github.com/tendermint/tm-db"
 	"math/rand"
+	mrand "math/rand"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
 	"time"
 )
 
-var (
-	PruningType = "nothing"
-)
-
+/**
+1. 生成一个db，两个db实例，cache size不同
+*/
 const (
-	GoLevelDB = "golevel"
-	IavlDB    = "iavl"
-	Round     = 10
-	Version   = "0.13.0"
+	KeyPrefix     = "Store"
+	eachStepScale = 10000
+	valueLen      = 24
 )
 
-func random(max, min int64) int64 {
-	rand.Seed(int64(time.Now().Nanosecond()))
-	return rand.Int63n(max-min) + min
-}
+func CreateIavlDB(name string, cacheSize int) (sdk.KVStore, sdk.CommitMultiStore, *tdb.GoLevelDB) {
 
-func Int64ToBytes(i int64) []byte {
-	var buf = make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, uint64(i))
-	return buf
-}
+	levelDB, err := db.NewGoLevelDB(name, "")
 
-func BytesToInt64(buf []byte) int64 {
-	return int64(binary.BigEndian.Uint64(buf))
-}
-
-func CreateLevelDB(size int64, prefix string) *db.GoLevelDB {
-	newDB, err := db.NewGoLevelDB(fmt.Sprintf("leveldb%s_%d", prefix, size), "")
 	if err != nil {
 		panic(err)
 	}
-	return newDB
-}
+	cms := cstore.NewCommitMultiStore(levelDB, cacheSize)
+	cms.SetPruning(cstore.PruneSyncable)
 
-func CreateIavlDB(size int64, prefix string) (sdk.KVStore, sdk.CommitMultiStore) {
-	var opts = cstore.PruneNothing
-	var endPrefix = PruningType
-
-	switch endPrefix {
-	case "every":
-		opts = cstore.PruneEverything
-	case "sync":
-		opts = cstore.PruneSyncable
-	default:
-		opts = cstore.PruneNothing
-	}
-
-	levelDB, err := db.NewGoLevelDB(fmt.Sprintf("iavl%s_%s_%s_%d", prefix, Version, "nothing", size), "")
-	if err != nil {
-		panic(err)
-	}
-	cms := cstore.NewCommitMultiStore(levelDB)
-	cms.SetPruning(opts)
-
-	storeKey := sdk.NewKVStoreKey(fmt.Sprintf("iavl_%d", size))
+	storeKey := sdk.NewKVStoreKey(fmt.Sprintf("iavl_%d", cacheSize))
 	cms.MountStoreWithDB(storeKey, sdk.StoreTypeIAVL, levelDB)
 	if err = cms.LoadLatestVersion(); err != nil {
 		panic(err)
 	}
 
-	return cms.GetKVStore(storeKey), cms
+	return cms.GetKVStore(storeKey), cms, levelDB
 }
 
-func leveldbMockData(size int64, long bool) {
-	if !long {
-		newDB := CreateLevelDB(size, "")
-		defer newDB.Close()
-		for i := int64(0); i < size; i++ {
-			key := Int64ToBytes(i)
-			value := ed25519.GenPrivKey().PubKey().Address().Bytes()
-			newDB.Set(key, value)
-		}
-	} else {
-		newDB := CreateLevelDB(size, "long")
-		defer newDB.Close()
-		for i := int64(0); i < size; i++ {
-			key := append(Int64ToBytes(i), []byte("Store")...)
-			value := NewSellOrder(size)
-			newDB.Set(key, value)
-		}
+func cleanupDBDir(name, dir string) {
+	if err := os.RemoveAll(filepath.Join(dir, name) + ".db"); err != nil {
+		panic(err)
 	}
-
 }
 
-func iavlMockData(size int64, long bool) {
-	if !long {
-		store, cms := CreateIavlDB(size, "")
-		for i := int64(0); i < size; i++ {
-			key := Int64ToBytes(i)
-			value := ed25519.GenPrivKey().PubKey().Address().Bytes()
-			store.Set(key, value)
+type dbTestFunc = func(stores []sdk.KVStore, cmss []sdk.CommitMultiStore, steps int) string
+
+func generateData(stores []sdk.KVStore, cmss []sdk.CommitMultiStore, steps int) string {
+	start := time.Now()
+	num := len(stores)
+	dbKeyNum := eachStepScale / num
+	for j := 0; j < num; j++ {
+		for i := j * dbKeyNum; i < (j+1)*dbKeyNum; i++ {
+			key := []byte(KeyPrefix + strconv.Itoa(i))
+			val := make([]byte, valueLen)
+			if _, err := rand.Read(val); err != nil {
+				panic(err)
+			}
+			stores[j].Set(key, []byte(hex.EncodeToString(val)))
 			if i%100 == 0 {
-				fmt.Printf("commit index %d\n", i)
-				cms.Commit()
+				cmss[j].Commit()
 			}
 		}
-	} else {
-		store, cms := CreateIavlDB(size, "long")
-		for i := int64(0); i < size; i++ {
-			key := append(Int64ToBytes(i), []byte("Store")...)
-			value := NewSellOrder(size)
-			store.Set(key, value)
+	}
+	return fmt.Sprintf("cost %s", time.Since(start))
+}
+
+func testDB(name string, cacheSize int, stepQuence []string, suite map[string]dbTestFunc, dbNum int) {
+	stores := make([]sdk.KVStore, dbNum)
+	cmss := make([]sdk.CommitMultiStore, dbNum)
+	dbs := make([]*tdb.GoLevelDB, dbNum)
+	for i := 0; i < dbNum; i++ {
+		stores[i], cmss[i], dbs[i] = CreateIavlDB(fmt.Sprintf("%s_%d", name, i), cacheSize)
+		defer cleanupDBDir(fmt.Sprintf("%s_%d", name, i), "")
+	}
+
+	for _, mKey := range stepQuence {
+		fmt.Printf("%s %s: %s\n", name, mKey, suite[mKey](stores, cmss, 1000))
+	}
+
+	for _, db := range dbs {
+		db.Close()
+	}
+}
+
+func testSet(stores []sdk.KVStore, cmss []sdk.CommitMultiStore, steps int) (out string) {
+	start := time.Now()
+	num := len(stores)
+	numKey := steps / num
+	for i := 0; i < num; i++ {
+		for step := 0; step < numKey; step++ {
+			key := []byte(KeyPrefix + strconv.Itoa(mrand.Intn(eachStepScale/num)+i*(eachStepScale/num)))
+			value := make([]byte, valueLen)
+			rand.Read(value)
+			stores[i].Set(key, value)
 		}
-		cms.Commit()
+		cmss[i].Commit()
 	}
+	out += fmt.Sprintf("cost %s", time.Since(start))
+	return
 }
 
-func generateDBMockData(size int64, backendType string, long bool) {
-	switch backendType {
-	case GoLevelDB:
-		leveldbMockData(size, long)
-	case IavlDB:
-		iavlMockData(size, long)
-	default:
-		panic("invalid db type")
-	}
-}
-
-func levelDB_GetKey_Time(size int64, long bool) {
-	if !long {
-		levelDB := CreateLevelDB(size, "")
-		defer levelDB.Close()
-		start := time.Now()
-		for i := 0; i < Round; i++ {
-			keyNum := random(size, 0)
-			levelDB.Get(Int64ToBytes(int64(keyNum)))
+func testGet(stores []sdk.KVStore, cmss []sdk.CommitMultiStore, steps int) (out string) {
+	// update set
+	start := time.Now()
+	num := len(stores)
+	for i := 0; i < num; i++ {
+		for step := 0; step < steps/num; step++ {
+			key := []byte(KeyPrefix + strconv.Itoa(mrand.Intn(eachStepScale/num)+i*(eachStepScale/num)))
+			stores[i].Get(key)
 		}
-		end := time.Since(start)
-		ret := end / time.Duration(Round)
-		fmt.Printf("demo level db size %d get %d key average time is %s\n", size, Round, ret.String())
-	} else {
-		levelDB := CreateLevelDB(size, "long")
-		defer levelDB.Close()
-		start := time.Now()
-		for i := 0; i < Round; i++ {
-			keyNum := random(size, 0)
-			levelDB.Get(append(Int64ToBytes(int64(keyNum)), []byte("Store")...))
-		}
-		end := time.Since(start)
-		ret := end / time.Duration(Round)
-		fmt.Printf("demo level db size %d get %d key average time is %s\n", size, Round, ret.String())
 	}
+	out += fmt.Sprintf("cost %s", time.Since(start))
+	return
 }
 
-func levelDB_SetKey_Time(size int64, long bool) {
-	if !long {
-		levelDB := CreateLevelDB(size, "")
-		defer levelDB.Close()
-		start := time.Now()
-		for i := 0; i < Round; i++ {
-			keyNum := random(size, 0)
-			levelDB.Set(Int64ToBytes(int64(keyNum)), ed25519.GenPrivKey().PubKey().Bytes())
-		}
-		end := time.Since(start)
-		ret := end / time.Duration(Round)
-		fmt.Printf("demo level db size %d set %d key average time is %s\n", size, Round, ret.String())
-	} else {
-		levelDB := CreateLevelDB(size, "long")
-		defer levelDB.Close()
-		start := time.Now()
-		for i := 0; i < Round; i++ {
-			keyNum := random(size, 0)
-			levelDB.Set(append(Int64ToBytes(int64(keyNum)), []byte("Store")...),
-				NewSellOrder(size))
-		}
-		end := time.Since(start)
-		ret := end / time.Duration(Round)
-		fmt.Printf("demo level db size %d set %d key average time is %s\n", size, Round, ret.String())
-	}
-}
+// find a way to warp this & make it work
+// TODO: fix this
+func reopen(name, dir string, dtype tdb.BackendType, scale int, db tdb.DB) string {
+	start := time.Now()
+	db.Close()
 
-func iavlDB_GetKey_Time(size int64, long bool) {
-	if !long {
-		iavlDB, _ := CreateIavlDB(size, "")
-		start := time.Now()
-		for i := 0; i < Round; i++ {
-			keyNum := random(size, 0)
-			iavlDB.Get(Int64ToBytes(int64(keyNum)))
-		}
-		end := time.Since(start)
-		ret := end / time.Duration(Round)
-		fmt.Printf("demo iavl db size %d get %d key average time is %s\n", size, Round, ret.String())
-	} else {
-		iavlDB, _ := CreateIavlDB(size, "long")
-		start := time.Now()
-		for i := 0; i < Round; i++ {
-			keyNum := random(size, 0)
-			iavlDB.Get(append(Int64ToBytes(int64(keyNum)), []byte("Store")...))
-		}
-		end := time.Since(start)
-		ret := end / time.Duration(Round)
-		fmt.Printf("demo iavl db size %d get %d key average time is %s\n", size, Round, ret.String())
-	}
-}
-
-func iavlDB_SetKey_Time(size int64, long bool) {
-	if !long {
-		iavlDB, cms := CreateIavlDB(size, "")
-		start := time.Now()
-		for i := 0; i < Round; i++ {
-			keyNum := random(size, 0)
-			iavlDB.Set(Int64ToBytes(int64(keyNum)), ed25519.GenPrivKey().PubKey().Bytes())
-		}
-		cms.Commit()
-		end := time.Since(start)
-		ret := end / time.Duration(Round)
-		fmt.Printf("demo iavl db size %d set %d key average time is %s\n", size, Round, ret.String())
-	} else {
-		iavlDB, cms := CreateIavlDB(size, "long")
-		start := time.Now()
-		for i := 0; i < Round; i++ {
-			keyNum := random(size, 0)
-			iavlDB.Set(append(Int64ToBytes(int64(keyNum)), []byte("Store")...),
-				NewSellOrder(size))
-		}
-		cms.Commit()
-		end := time.Since(start)
-		ret := end / time.Duration(Round)
-		fmt.Printf("demo iavl db size %d set %d key average time is %s\n", size, Round, ret.String())
-	}
-}
-
-func calTime(size int64, backendType string, long bool) {
-	switch backendType {
-	case GoLevelDB:
-		levelDB_GetKey_Time(size, long)
-	case IavlDB:
-		iavlDB_GetKey_Time(size, long)
-	default:
-		panic("invalid db type")
-	}
-}
-
-func setKey(size int64, backendType string, long bool) {
-	switch backendType {
-	case GoLevelDB:
-		levelDB_SetKey_Time(size, long)
-	case IavlDB:
-		iavlDB_SetKey_Time(size, long)
-	default:
-		panic("invalid db type")
-	}
-}
-
-func demoCase1(cal bool, set bool, long bool) {
-	size := int64(1e5)
-	if cal {
-		calTime(size, GoLevelDB, long)
-		return
-	}
-	if set {
-		setKey(size, GoLevelDB, long)
-		return
-	}
-	generateDBMockData(size, GoLevelDB, long)
-}
-
-func demoCase2(cal bool, set bool, long bool) {
-	size := int64(1e6)
-	if cal {
-		calTime(size, GoLevelDB, long)
-		return
-	}
-	if set {
-		setKey(size, GoLevelDB, long)
-		return
-	}
-	generateDBMockData(size, GoLevelDB, long)
-}
-
-func demoCase3(cal bool, set bool, long bool) {
-	size := int64(1e5)
-	if cal {
-		calTime(size, IavlDB, long)
-		return
-	}
-	if set {
-		setKey(size, IavlDB, long)
-		return
-	}
-	generateDBMockData(1e5, IavlDB, long)
-}
-
-func demoCase4(cal bool, set bool, long bool) {
-	size := int64(1e6)
-	if cal {
-		calTime(size, IavlDB, long)
-		return
-	}
-	if set {
-		setKey(size, IavlDB, long)
-		return
-	}
-	generateDBMockData(1e6, IavlDB, long)
+	db = tdb.NewDB(name, dtype, dir)
+	return fmt.Sprintf("reopen, %dms", time.Since(start).Milliseconds())
 }
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
-	demoCase := flag.Int("case", 0, "select a demo case run")
-	time := flag.Bool("time", false, fmt.Sprintf("get %d key Average time", Round))
-	set := flag.Bool("set", false, fmt.Sprintf("set %d key Average time", Round))
-	long := flag.Bool("long", false, fmt.Sprintf("set long key"))
-	flag.Parse()
-
-	switch *demoCase {
-	case 1:
-		demoCase1(*time, *set, *long)
-	case 2:
-		demoCase2(*time, *set, *long)
-	case 3:
-		demoCase3(*time, *set, *long)
-	case 4:
-		demoCase4(*time, *set, *long)
-	default:
-		panic("error case number")
+	// diff cache size instance
+	stepQ := []string{"gen", "set", "get"}
+	cacheSuite := map[string]dbTestFunc{
+		"gen": generateData,
+		"set": testSet,
+		"get": testGet,
 	}
+	runtime.GC()
+	size := 10000
+	testDB("cache_1W", size, stepQ, cacheSuite, 1)
+
+	runtime.GC()
+	size = 100000
+	testDB("cache_10W", size, stepQ, cacheSuite, 1)
+
+	fmt.Println("---------------------------------------------")
+	// key Dispersed diff db
+
+	stepQ = []string{"gen", "set", "get"}
+	cacheSuite = map[string]dbTestFunc{
+		"gen": generateData,
+		"set": testSet,
+		"get": testGet,
+	}
+	size = 100000
+	testDB("cache_10W_4db", size, stepQ, cacheSuite, 4)
+	testDB("cache_10W_8db", size, stepQ, cacheSuite, 8)
 }
