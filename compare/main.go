@@ -20,7 +20,10 @@ const (
 	GoLevelDB = "golevel"
 	IavlDB    = "iavl"
 	Round     = 10
-	Version   = "0.13.0"
+)
+
+var (
+	Version = "0.13.0"
 )
 
 func random(max, min int64) int64 {
@@ -59,7 +62,7 @@ func CreateIavlDB(size int64, prefix string) (sdk.KVStore, sdk.CommitMultiStore)
 		opts = cstore.PruneNothing
 	}
 
-	levelDB, err := db.NewGoLevelDB(fmt.Sprintf("iavl%s_%s_%s_%d", prefix, Version, "nothing", size), "")
+	levelDB, err := db.NewGoLevelDB(fmt.Sprintf("iavl%s_%s_%d", prefix, Version, size), "")
 	if err != nil {
 		panic(err)
 	}
@@ -315,7 +318,10 @@ func main() {
 	time := flag.Bool("time", false, fmt.Sprintf("get %d key Average time", Round))
 	set := flag.Bool("set", false, fmt.Sprintf("set %d key Average time", Round))
 	long := flag.Bool("long", false, fmt.Sprintf("set long key"))
+	flagVersion := flag.String("version", Version, fmt.Sprintf("set version"))
 	flag.Parse()
+
+	Version = *flagVersion
 
 	switch *demoCase {
 	case 1:
