@@ -11,6 +11,7 @@ import (
 )
 
 // main runs the main program
+//$ program [db_home] [module_name] [height]
 func main() {
 	if len(os.Args) != 4 {
 		fmt.Fprintf(os.Stderr, "Usage: %v <dbpath>\n", os.Args[0])
